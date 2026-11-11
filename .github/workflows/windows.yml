@@ -1,0 +1,71 @@
+name: Windows build
+
+on:
+  push:
+    branches: [fix]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Set up MSYS2 UCRT64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            base-devel
+            git
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-meson
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-vala
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-gtk4
+            mingw-w64-ucrt-x86_64-libadwaita
+            mingw-w64-ucrt-x86_64-libgee
+            mingw-w64-ucrt-x86_64-libsoup3
+            mingw-w64-ucrt-x86_64-sqlite3
+            mingw-w64-ucrt-x86_64-json-glib
+            mingw-w64-ucrt-x86_64-libical
+            mingw-w64-ucrt-x86_64-libsecret
+            mingw-w64-ucrt-x86_64-gtksourceview5
+            mingw-w64-ucrt-x86_64-icu
+            mingw-w64-ucrt-x86_64-libspelling
+            mingw-w64-ucrt-x86_64-enchant
+            mingw-w64-ucrt-x86_64-hunspell
+            mingw-w64-ucrt-x86_64-libgnutls
+            mingw-w64-ucrt-x86_64-gstreamer
+            mingw-w64-ucrt-x86_64-gst-plugins-base
+            mingw-w64-ucrt-x86_64-gst-plugins-good
+            mingw-w64-ucrt-x86_64-glib2
+            mingw-w64-ucrt-x86_64-gdk-pixbuf2
+            mingw-w64-ucrt-x86_64-gettext
+            mingw-w64-ucrt-x86_64-curl
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Configure
+        run: >
+          meson setup build
+          --prefix=/ucrt64
+          --buildtype=release
+          -Dportal=false
+          -Devolution=false
+          -Dgoa=false
+          -Dspelling=disabled
+      - name: Build
+        run: meson compile -C build
+      - name: Package portable distribution
+        run: meson compile -C build win-dist
+      - name: Upload portable distribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: planify-windows-ucrt64
+          path: build/dist/
+          if-no-files-found: error
