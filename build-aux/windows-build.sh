@@ -34,7 +34,11 @@ copy_required() {
     local source="$1"
     local destination="$2"
     [[ -e "$source" ]] || die "required packaging input not found: $source"
-    cp -v "$source" "$destination"
+    if [[ -d "$source" ]]; then
+        cp -rv "$source" "$destination"
+    else
+        cp -v "$source" "$destination"
+    fi
 }
 
 rm -rf "$dist_dir"
