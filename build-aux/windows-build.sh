@@ -1,60 +1,102 @@
 #!/usr/bin/env bash
+set -Eeuo pipefail
 
-# remove dist directory
-rm -rf dist
+# Meson passes the declared custom-target output as the first argument.
+stamp_file="${1:?usage: windows-build.sh <stamp-file>}"
+dist_dir="${PWD}/dist"
+prefix="${MSYSTEM_PREFIX:-/ucrt64}"
 
-# create new dist directory
-mkdir -p dist/bin
+die() {
+    printf 'windows-build: ERROR: %s\n' "$*" >&2
+    exit 1
+}
 
-# copy all dependencies (most automatic; a few have to be done manually)
-ldd src/io.github.alainm23.planify.exe | grep '/ucrt64.*\.dll' -o | xargs -i cp -v {} dist/bin
-ldd core/libplanify-0.dll | grep '/ucrt64.*\.dll' -o | xargs -i cp -v {} dist/bin
-cp -v /ucrt64/bin/gdbus.exe dist/bin
-cp -v /ucrt64/bin/libgnutls* dist/bin
+copy_runtime_dependencies() {
+    local binary="$1"
+    local ldd_output dependency
 
-# copy the built Planify executable and library
-cp -v src/io.github.alainm23.planify.exe dist/bin
-cp -v core/libplanify-0.dll dist/bin
+    [[ -f "$binary" ]] || die "required binary not found: $binary"
+    ldd_output="$(ldd "$binary")" || die "ldd failed for $binary"
 
-# copy Chrono subproject
-cp -v subprojects/chrono/lib/libchrono.dll dist/bin
+    if grep -q 'not found' <<<"$ldd_output"; then
+        printf '%s\n' "$ldd_output" >&2
+        die "unresolved DLL dependency for $binary"
+    fi
 
-# copy the necessary icon themes
-mkdir -p dist/share/icons
-cp -rv /ucrt64/share/icons/Adwaita dist/share/icons
-cp -rv /ucrt64/share/icons/hicolor dist/share/icons
-cp -rv ../data/icons/hicolor dist/share/icons
+    while IFS= read -r dependency; do
+        [[ -n "$dependency" ]] || continue
+        [[ -f "$dependency" ]] || die "dependency reported by ldd does not exist: $dependency"
+        cp -vu "$dependency" "$dist_dir/bin/"
+    done < <(awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^\/ucrt64\/.*\.dll$/) print $i }' <<<"$ldd_output" | sort -u)
+}
 
-# copy the translation files
-mkdir -p dist/share/locale
-cp -rv po/* dist/share/locale/
+copy_required() {
+    local source="$1"
+    local destination="$2"
+    [[ -e "$source" ]] || die "required packaging input not found: $source"
+    cp -v "$source" "$destination"
+}
 
-# copy the necessary glib schemas
-mkdir -p dist/share/glib-2.0/schemas
-cp -v ../data/io.github.alainm23.planify.gschema.xml dist/share/glib-2.0/schemas/
-glib-compile-schemas ./dist/share/glib-2.0/schemas/
+rm -rf "$dist_dir"
+mkdir -p "$dist_dir/bin"
 
-# copy the enchant and hunspell libraries and dictionaries (otherwise spellcheck doesn't work)
-mkdir -p dist/lib/enchant-2
-cp -v /ucrt64/lib/enchant-2/enchant_hunspell.dll dist/lib/enchant-2
-cp -v /ucrt64/bin/libhunspell-1.7-0.dll dist/bin/
-cp -rv /ucrt64/share/hunspell dist/share/
+# Copy dependencies reported by the executable and Planify's shared library.
+copy_runtime_dependencies src/io.github.alainm23.planify.exe
+copy_runtime_dependencies core/libplanify-0.dll
 
-# copy the necessary gio module (otherwise TLS/SSL doesn't work)
-mkdir -p dist/lib/gio/modules
-cp -v /ucrt64/lib/gio/modules/libgioopenssl.dll dist/lib/gio/modules/
+copy_required "$prefix/bin/gdbus.exe" "$dist_dir/bin/"
+cp -v "$prefix"/bin/libgnutls*.dll "$dist_dir/bin/"
 
-# copy GStreamer and the necessary plugins (otherwise task-complete sound doesn't work)
-cp -v /ucrt64/bin/libgst*.dll dist/bin
-cp -rv /ucrt64/lib/gstreamer-1.0 dist/lib/
-for dll in dist/lib/gstreamer-1.0/*.dll; do
-    # make sure we have all the necessary dependencies too
-    ldd "$dll" | grep '/ucrt64.*\.dll' -o | xargs -i cp -vu {} dist/bin
+# Copy the built Planify executable, shared library, and Chrono subproject.
+copy_required src/io.github.alainm23.planify.exe "$dist_dir/bin/"
+copy_required core/libplanify-0.dll "$dist_dir/bin/"
+copy_required subprojects/chrono/lib/libchrono.dll "$dist_dir/bin/"
+
+# Icon themes.
+mkdir -p "$dist_dir/share/icons"
+copy_required "$prefix/share/icons/Adwaita" "$dist_dir/share/icons/"
+copy_required "$prefix/share/icons/hicolor" "$dist_dir/share/icons/"
+copy_required ../data/icons/hicolor "$dist_dir/share/icons/"
+
+# Translations.
+mkdir -p "$dist_dir/share/locale"
+cp -rv po/* "$dist_dir/share/locale/"
+
+# GLib schemas.
+mkdir -p "$dist_dir/share/glib-2.0/schemas"
+copy_required ../data/io.github.alainm23.planify.gschema.xml "$dist_dir/share/glib-2.0/schemas/"
+glib-compile-schemas "$dist_dir/share/glib-2.0/schemas/"
+
+# Enchant and Hunspell dictionaries.
+mkdir -p "$dist_dir/lib/enchant-2"
+copy_required "$prefix/lib/enchant-2/enchant_hunspell.dll" "$dist_dir/lib/enchant-2/"
+copy_required "$prefix/bin/libhunspell-1.7-0.dll" "$dist_dir/bin/"
+copy_required "$prefix/share/hunspell" "$dist_dir/share/"
+
+# GIO OpenSSL module.
+mkdir -p "$dist_dir/lib/gio/modules"
+copy_required "$prefix/lib/gio/modules/libgioopenssl.dll" "$dist_dir/lib/gio/modules/"
+
+# GStreamer and plugin dependencies.
+shopt -s nullglob
+gst_dlls=("$prefix"/bin/libgst*.dll)
+(("${#gst_dlls[@]}" > 0)) || die "no GStreamer DLLs found under $prefix/bin"
+cp -v "${gst_dlls[@]}" "$dist_dir/bin/"
+copy_required "$prefix/lib/gstreamer-1.0" "$dist_dir/lib/"
+for plugin in "$dist_dir"/lib/gstreamer-1.0/*.dll; do
+    copy_runtime_dependencies "$plugin"
 done
 
-# copy the libical time zone data
-cp -rv /ucrt64/share/libical dist/share
+# libical time-zone data.
+copy_required "$prefix/share/libical" "$dist_dir/share/"
 
-# get the latest CLDR mapping of Windows time zones to standard libical/tzdata zones
-# UNICODE LICENSE v3: https://github.com/unicode-org/cldr/blob/main/LICENSE
-curl -o dist/share/windowsZones.xml https://raw.githubusercontent.com/unicode-org/cldr/refs/heads/main/common/supplemental/windowsZones.xml
+# Use a fixed, immutable CLDR release tag rather than the moving main branch.
+mkdir -p "$dist_dir/share"
+cldr_url="https://raw.githubusercontent.com/unicode-org/cldr/release-49/common/supplemental/windowsZones.xml"
+curl --fail --location --retry 3 --output "$dist_dir/share/windowsZones.xml" "$cldr_url"
+[[ -s "$dist_dir/share/windowsZones.xml" ]] || die "CLDR windowsZones.xml download is empty"
+
+# Only publish the Meson output marker after every packaging step succeeded.
+mkdir -p "$(dirname "$stamp_file")"
+touch "$stamp_file"
+printf 'Portable distribution created at %s\n' "$dist_dir"
