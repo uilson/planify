@@ -187,10 +187,11 @@ if is_windows
   win_dist = custom_target(
     'win-dist',
     input: '../build-aux/windows-build.sh',
-    output: 'some.txt',
+    output: 'win-dist.stamp',
     command: [
-      'sh',
-      '@INPUT@'
+      'bash',
+      '@INPUT@',
+      '@OUTPUT@'
     ],
     install: false,
     build_by_default: true,
