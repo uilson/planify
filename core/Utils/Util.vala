@@ -29,6 +29,15 @@ public class Util : GLib.Object {
         return _instance;
     }
 
+    public static void open_url(string url) throws Error {
+        #if IS_WINDOWS
+        Win32Util.url_opener (url);
+        #else
+        // GIO URL launcher
+        AppInfo.launch_default_for_uri (url, null);
+        #endif
+    }
+
     /*
     *  Colors Utils
     */
@@ -72,7 +81,7 @@ public class Util : GLib.Object {
         if (key == null || key == "") {
             return "#1e63ec";
         }
-        
+
         if (get_colors ().has_key (key)) {
             return get_colors ().get (key).hexadecimal;
         }
@@ -103,11 +112,11 @@ public class Util : GLib.Object {
         if (color == null || color == "" || widget == null) {
             return;
         }
-        
+
         if (providers == null) {
             providers = new Gee.HashMap<string, Gtk.CssProvider> ();
         }
- 
+
         if (!providers.has_key (color)) {
             string style = """
                 @define-color colorAccent %s;
@@ -145,7 +154,7 @@ public class Util : GLib.Object {
         if (id == null) {
             return;
         }
-        
+
         var file_path = File.new_for_path (get_avatar_path (id));
         var file_from_uri = File.new_for_uri (avatar_url);
 
@@ -212,7 +221,7 @@ public class Util : GLib.Object {
     public string get_theme_name () {
         string returned = "";
         int appearance_mode = Services.Settings.get_default ().settings.get_enum ("appearance");
-        
+
         switch (appearance_mode) {
             case 0:
                 returned = _("Light");
@@ -230,26 +239,26 @@ public class Util : GLib.Object {
 
     public static string get_user_language () {
         string[] languages = Intl.get_language_names ();
-        
+
         if (languages.length > 0) {
             string lang = languages[0];
-            
+
             if ("_" in lang) {
                 lang = lang.split ("_")[0];
             } else if ("." in lang) {
                 lang = lang.split (".")[0];
             }
-            
+
             return lang.down ();
         }
-        
+
         return "en";
     }
 
     public string get_badge_name () {
         string returned = "";
         int badge_count = Services.Settings.get_default ().settings.get_enum ("badge-count");
-        
+
         switch (badge_count) {
             case 0:
                 returned = _("None");
@@ -334,7 +343,14 @@ public class Util : GLib.Object {
                 upcoming_fg_color = "#e6e9ef";
                 selected_color = "#2a303a";
                 card_bg_color = "#1E2026";
+                Adw.StyleManager.get_default ().color_scheme = Adw.ColorScheme.FORCE_DARK;
             }
+            // Windows dark overrides
+            #if IS_WINDOWS
+            window_bg_color = "#202020";
+            card_bg_color = "#323232";
+            sidebar_bg_color = "#323232";
+            #endif
         } else {
             window_bg_color = "#f9f9f9";
             popover_bg_color = "#ffffff";
@@ -344,6 +360,14 @@ public class Util : GLib.Object {
             upcoming_fg_color = "#2d2e32";
             selected_color = "#dbeafe";
             card_bg_color = "#ffffff";
+            Adw.StyleManager.get_default ().color_scheme = Adw.ColorScheme.FORCE_LIGHT;
+
+            // Windows light overrides
+            #if IS_WINDOWS
+            //window_bg_color = "#f3f3f3";
+            window_bg_color = "#f8f8f8";
+            sidebar_bg_color = "#f3f3f3";
+            #endif
         }
 
         Adw.StyleManager.get_default ().color_scheme = dark_mode ? Adw.ColorScheme.FORCE_DARK : Adw.ColorScheme.FORCE_LIGHT;
@@ -391,6 +415,15 @@ public class Util : GLib.Object {
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         );
 
+        #if IS_WINDOWS
+        var app = (Gtk.Application) GLib.Application.get_default ();
+        var win = (Gtk.Window) app.get_active_window ();
+        var surface = win.get_surface();
+        void* hwnd = Win32Util.get_hwnd (surface);
+
+        Win32Util.set_dark_theme (hwnd, dark_mode);
+        #endif
+
         Services.EventBus.get_default ().theme_changed ();
     }
 
@@ -398,15 +431,22 @@ public class Util : GLib.Object {
         string _css = """
             popover,
             window {
-                font-size: %s%;
+                font-size: calc(%s * %s);
             }
         """;
+
 
         var provider = new Gtk.CssProvider ();
 
         try {
-            string scale = (100 * Services.Settings.get_default ().get_double ("font-scale")).to_string ();
-            var css = _css.printf (scale);
+            #if IS_WINDOWS
+            // GTK doesn't quite get the Windows font size right; use fixed 10pt as our "1.0" size baseline
+            string base_font = "10pt";
+            #else
+            string base_font = "1em";
+            #endif
+            string scale = (Services.Settings.get_default ().get_double ("font-scale")).to_string ();
+            var css = _css.printf (scale, base_font);
 
             provider.load_from_string (css);
             Gtk.StyleContext.add_provider_for_display (
@@ -422,7 +462,7 @@ public class Util : GLib.Object {
     * Replaces all line breaks with a space and
     * replaces multiple spaces with a single one.
     */
-    
+
     private GLib.Regex line_break_to_space_regex = null;
     public string line_break_to_space (string str) {
         if (line_break_to_space_regex == null) {
@@ -451,7 +491,7 @@ public class Util : GLib.Object {
             _audio_media = null;
         });
         _audio_media.play ();
-    }    
+    }
 
     public bool is_input_valid (Gtk.Entry entry) {
         return entry.get_text_length () > 0;
@@ -463,7 +503,7 @@ public class Util : GLib.Object {
 
     public string get_short_name (string name, int size = Constants.SHORT_NAME_SIZE) {
         string returned = name;
-        
+
         int char_count = name.char_count ();
         if (char_count > size) {
             returned = name.substring (0, name.index_of_nth_char (size)) + "…";
@@ -549,10 +589,10 @@ public class Util : GLib.Object {
         if (is_flatpak != null) {
             return true;
         }
-    
+
         return false;
     }
-    
+
     public List<Gtk.ListBoxRow> get_children (Gtk.ListBox list) {
         List<Gtk.ListBoxRow> response = new List<Gtk.ListBoxRow> ();
 
@@ -731,7 +771,7 @@ We hope you’ll enjoy using Planify!""");
         item_03_03.section_id = section_02.id;
         item_03_03.content = _("Set timely reminders!");
         item_03_03.description = _("Get notified about important tasks or events. Tap the clock button below to add a reminder.");
-        
+
         section_02.add_item_if_not_exists (item_03_01);
         section_02.add_item_if_not_exists (item_03_02);
         section_02.add_item_if_not_exists (item_03_03);
@@ -804,7 +844,7 @@ We hope you’ll enjoy using Planify!""");
 
         builder.set_member_name ("etag");
         builder.add_string_value (etag);
-        
+
         builder.set_member_name ("calendar-data");
         builder.add_string_value (data);
 
@@ -913,7 +953,7 @@ We hope you’ll enjoy using Planify!""");
             yield insert_duplicate_item (new_item, item, notify);
         } else if (new_item.project.source_type == SourceType.TODOIST) {
             HttpResponse response = yield Services.Todoist.get_default ().add (new_item);
-            
+
             item.loading = false;
             item.sensitive = true;
 
@@ -925,7 +965,7 @@ We hope you’ll enjoy using Planify!""");
             new_item.id = Util.get_default ().generate_id (new_item);
             var caldav_client = Services.CalDAV.Core.get_default ().get_client (new_item.project.source);
             HttpResponse response = yield caldav_client.add_item (new_item);
-            
+
             item.loading = false;
             item.sensitive = true;
 
@@ -1032,29 +1072,29 @@ We hope you’ll enjoy using Planify!""");
             Services.EventBus.get_default ().send_toast (
                 Util.get_default ().create_toast (_("Project duplicated"))
             );
-        } else if (project.source_type == SourceType.TODOIST) {            
+        } else if (project.source_type == SourceType.TODOIST) {
             Services.Todoist.get_default ().duplicate_project.begin (project, (obj, res) => {
                 project.loading = false;
-                
+
                 if (Services.Todoist.get_default ().duplicate_project.end (res).status) {
                     Services.Todoist.get_default ().sync.begin (project.source);
                 }
             });
         } else if (project.source_type == SourceType.CALDAV) {
             new_project.id = Util.get_default ().generate_id (new_project);
-            
+
             var caldav_client = Services.CalDAV.Core.get_default ().get_client (new_project.source);
             HttpResponse response = yield caldav_client.create_project (new_project);
 
             if (response.status) {
                 Services.Store.instance ().insert_project (new_project);
-            
+
                 foreach (Objects.Item item in project.items) {
                     yield duplicate_item (item, new_project.id, "", item.parent_id, false);
                 }
-    
+
                 project.loading = false;
-    
+
                 Services.EventBus.get_default ().send_toast (
                     Util.get_default ().create_toast (_("Project duplicated"))
                 );
@@ -1206,7 +1246,7 @@ We hope you’ll enjoy using Planify!""");
 
     public int set_item_sort_func (Objects.Item item1, Objects.Item item2, SortedByType sorted_by, SortOrderType sort_order) {
         int result = 0;
-        
+
         if (sorted_by == SortedByType.MANUAL) {
             result = item1.child_order - item2.child_order;
         } else if (sorted_by == SortedByType.NAME) {

@@ -7,23 +7,23 @@ deps = [
 ]
 
 
-if get_option('portal')
-    if libportal_dep.found()
-        deps += libportal_dep
-    endif
-    if libportal_gtk4_dep.found()
-        deps += libportal_gtk4_dep
-    endif
+if with_portal
+  if libportal_dep.found()
+      deps += libportal_dep
+  endif
+  if libportal_gtk4_dep.found()
+      deps += libportal_gtk4_dep
+  endif
 endif
 
 
-if get_option('evolution')
-    if libedataserver_dep.found()
-        deps += libedataserver_dep
-    endif
+if with_evolution
+  if libedataserver_dep.found()
+      deps += libedataserver_dep
+  endif
 endif
 
-if get_option('goa')
+if with_goa
     if goa_dep.found()
         deps += goa_dep
     endif
@@ -62,7 +62,7 @@ sources = files(
   'Layouts/HeaderBar.vala',
   'Layouts/SidebarSourceRow.vala',
   'Layouts/ProjectContainerRow.vala',
-  
+
   'Widgets/ColorPickerRow.vala',
   'Widgets/MagicButton.vala',
   'Widgets/EditableTextView.vala',
@@ -99,7 +99,7 @@ sources = files(
   'Views/Label/Labels.vala',
   'Views/Label/LabelSourceRow.vala',
   'Views/Filter.vala',
-  
+
   'Views/Scheduled/Scheduled.vala',
   'Views/Scheduled/ScheduledSection.vala',
   'Views/Scheduled/ScheduledDay.vala',
@@ -124,7 +124,7 @@ sources = files(
   'Dialogs/ProductivityReport/ProductivitySection.vala',
   'Dialogs/ProductivityReport/StatCard.vala',
   'Dialogs/ProductivityReport/HeatMap.vala',
-  
+
   'Dialogs/QuickFind/QuickFind.vala',
   'Dialogs/QuickFind/QuickFindItem.vala',
   'Dialogs/QuickFind/QuickFindSectionSorter.vala',
@@ -149,20 +149,51 @@ sources = files(
   'Dialogs/Preferences/Pages/Accounts/InboxPage.vala'
 )
 
-if get_option('evolution')
+if with_evolution
     sources += 'Widgets/EventRow.vala'
     sources += 'Widgets/EventsList.vala'
     sources += 'Dialogs/CalendarSync.vala'
     sources += 'Dialogs/Preferences/Pages/CalendarEvents.vala'
 endif
 
-executable(
+if is_windows
+  # if Windows build, prepare the resource file
+
+  # process the resource file (inject version number)
+  winrc_conf = configuration_data()
+  winrc_conf.set('version', meson.project_version().replace('.', ',') + ',0')
+  winrc_file = configure_file(
+      input: files('../data/io.github.alainm23.planify.rc.in'),
+      output: 'io.github.alainm23.planify.rc',
+      configuration: winrc_conf
+  )
+
+  # apply Windows resource file (icon and metadata) to the executable
+  sources += import('windows').compile_resources(winrc_file)
+endif
+
+app = executable(
   application_id,
   sources,
   asresources,
   config_file,
   dependencies: deps,
-  install: true
+  install: true,
+  win_subsystem: (with_win_console) ? 'console' : 'windows'
 )
 
-
+# on Windows, run the script to put all necessary files in build/dist
+if is_windows
+  win_dist = custom_target(
+    'win-dist',
+    input: '../build-aux/windows-build.sh',
+    output: 'some.txt',
+    command: [
+      'sh',
+      '@INPUT@'
+    ],
+    install: false,
+    build_by_default: true,
+    depends: app
+  )
+endif

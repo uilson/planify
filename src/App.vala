@@ -38,7 +38,6 @@ public class Planify : Adw.Application {
     private static bool show_log_path = false;
     private static string lang = "";
 
-    
     #if WITH_LIBPORTAL
     private Xdp.Portal ? portal = null;
     #endif
@@ -141,6 +140,13 @@ public class Planify : Adw.Application {
 
         main_window = new MainWindow (this);
 
+        #if IS_WINDOWS
+        // On Windows, un-decorate the window (remote Adwaita/GTK chrome) before showing
+        // if we do this after showing, the window size will change from the saved value
+        // but we can't add the Windows standard chrome yet, because Gdk.Toplevel doesn't exist until after .show()!
+        main_window.decorated = false;
+        #endif
+
         Services.Settings.get_default ().settings.bind ("window-height", main_window, "default-height", SettingsBindFlags.DEFAULT);
         Services.Settings.get_default ().settings.bind ("window-width", main_window, "default-width", SettingsBindFlags.DEFAULT);
 
@@ -163,6 +169,39 @@ public class Planify : Adw.Application {
             Gdk.Display.get_default (), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         );
 
+        #if IS_WINDOWS
+        // adjustments to make the window UI fit in better on the Windows platform
+
+        // get Win32 Gdk.Toplevel object
+        Gdk.Toplevel w32_toplevel = main_window.get_surface() as Gdk.Toplevel;
+
+        // add Windows standard titlebar/chrome to the Gdk.Toplevel
+        w32_toplevel.set_decorated(true);
+
+        // set the toplevel icon list so the correct icon is shown on the Windows titlebar
+        var icon_list = new GLib.List<Gdk.Texture>();
+        icon_list.append(
+            Gdk.Texture.from_resource("/io/github/alainm23/planify/planify-16.png")
+        );
+        icon_list.append(
+            Gdk.Texture.from_resource("/io/github/alainm23/planify/planify-24.png")
+        );
+        icon_list.append(
+            Gdk.Texture.from_resource("/io/github/alainm23/planify/planify-32.png")
+        );
+        icon_list.append(
+            Gdk.Texture.from_resource("/io/github/alainm23/planify/planify-48.png")
+        );
+        w32_toplevel.set_icon_list(icon_list);
+
+        // bring in some custom Windows CSS to tweak colors and layout for a more Windowsy experience
+        var win_provider = new Gtk.CssProvider ();
+        win_provider.load_from_resource ("/io/github/alainm23/planify/stylesheet/windows.css");
+        Gtk.StyleContext.add_provider_for_display (
+            Gdk.Display.get_default (), win_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1
+        );
+        #endif
+
         Util.get_default ().update_theme ();
         Util.get_default ().update_font_scale ();
 
@@ -173,8 +212,8 @@ public class Planify : Adw.Application {
     #if WITH_LIBPORTAL
     public async bool ask_for_background (Xdp.BackgroundFlags flags = Xdp.BackgroundFlags.AUTOSTART) {
         bool run_in_background = Services.Settings.get_default ().settings.get_boolean ("run-in-background");
-        string[] daemon_command = run_in_background ? 
-            new string[] { Build.APPLICATION_ID, "--background" } : 
+        string[] daemon_command = run_in_background ?
+            new string[] { Build.APPLICATION_ID, "--background" } :
             new string[] { Build.APPLICATION_ID };
 
         if (portal == null) {
@@ -212,7 +251,7 @@ public class Planify : Adw.Application {
             main_window.destroy ();
             main_window = null;
         }
-        
+
         activate ();
     }
 

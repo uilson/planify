@@ -55,12 +55,12 @@ core_files = files(
     'Widgets/ContextMenu/MenuPicker.vala',
     'Widgets/ContextMenu/MenuCheckPicker.vala',
     'Widgets/ContextMenu/MenuSwitch.vala',
-    
+
     'Widgets/DateTimePicker/ScheduleButton.vala',
     'Widgets/DateTimePicker/DateTimePicker.vala',
     'Widgets/DateTimePicker/TimePicker.vala',
     'Widgets/DateTimePicker/RepeatConfig.vala',
-    
+
     'Widgets/LabelPicker/LabelPicker.vala',
     'Widgets/LabelPicker/LabelRow.vala',
     'Widgets/LabelPicker/LabelButton.vala',
@@ -80,7 +80,7 @@ core_files = files(
     'Widgets/ReminderPicker/ReminderButton.vala',
     'Widgets/ReminderPicker/ReminderPicker.vala',
     'Widgets/ReminderPicker/ReminderRow.vala',
-    
+
     'Objects/BaseObject.vala',
     'Objects/Color.vala',
     'Objects/DueDate.vala',
@@ -95,7 +95,7 @@ core_files = files(
     'Objects/Source.vala',
     'Objects/TranslationMetric.vala',
     'Objects/Release.vala',
-    
+
     'Objects/Filters/Inbox.vala',
     'Objects/Filters/Pinboard.vala',
     'Objects/Filters/Scheduled.vala',
@@ -111,18 +111,22 @@ core_files = files(
     'Objects/Filters/AllItems.vala'
 )
 
-if get_option('evolution')
+if with_evolution
     core_files += 'Services/CalendarEvents/CalendarEvents.vala'
     core_files += 'Services/CalendarEvents/DateIterator.vala'
     core_files += 'Services/CalendarEvents/DateRange.vala'
     core_files += 'Services/CalendarEvents/Util.vala'
 endif
 
-if get_option('goa')
+if with_goa
     core_files += 'Services/GOA.vala'
 endif
 
 chrono_dep = dependency('chrono', fallback: ['chrono', 'libchrono_dep'])
+
+if is_windows
+    core_files += 'Utils/Win32Util.vala'
+endif
 
 core_deps = [
   chrono_dep,
@@ -140,14 +144,18 @@ core_deps = [
   gtksourceview_dep
 ]
 
-if get_option('evolution')
+if is_windows
+    core_deps += [cc.find_library('dwmapi')]
+endif
+
+if with_evolution
     if libecal_dep.found()
         core_deps += libecal_dep
         core_deps += libedataserver_dep
     endif
 endif
 
-if get_option('goa')
+if with_goa
     if goa_dep.found()
         core_deps += goa_dep
     endif
