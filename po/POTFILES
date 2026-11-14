@@ -58,6 +58,7 @@ core/Utils/Datetime.vala
 core/Utils/JsonUtils.vala
 core/Utils/MarkdownProcessor.vala
 core/Utils/Util.vala
+core/Utils/Win32Util.vala
 core/Widgets/Calendar/Calendar.vala
 core/Widgets/Calendar/CalendarDay.vala
 core/Widgets/Calendar/CalendarHeader.vala
