@@ -24,7 +24,7 @@ public class Widgets.NewVersionPopup : Adw.Bin {
 
     public void show_with_animation () {
         star_icon.add_css_class ("fancy-bounce-turn-animation");
-        
+
         Timeout.add (800, () => {
             star_icon.remove_css_class ("fancy-bounce-turn-animation");
             return Source.REMOVE;

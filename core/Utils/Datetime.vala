@@ -72,7 +72,7 @@ public class Utils.Datetime {
 
         return returned;
     }
-    
+
     public static string days_left (GLib.DateTime datetime, bool show_today = false) {
         string return_value = "";
         var days = datetime.difference (new GLib.DateTime.now_local ()) / TimeSpan.DAY;
@@ -152,7 +152,7 @@ public class Utils.Datetime {
             duedate.recurrency_weeks = "";
             return;
         }
-        
+
         duedate.recurrence_supported = true;
         duedate.is_recurring = true;
         duedate.recurrency_interval = result.recurrence.interval;
@@ -404,7 +404,7 @@ public class Utils.Datetime {
         if (duedate.recurrency_weeks == null || duedate.recurrency_weeks == "") {
             return datetime.get_day_of_week ();
         }
-        
+
         string[] weeks = duedate.recurrency_weeks.split (",");
         int day_of_week = datetime.get_day_of_week ();
         int index = 0;
@@ -427,7 +427,7 @@ public class Utils.Datetime {
         if (duedate.recurrency_weeks == null || duedate.recurrency_weeks == "") {
             return datetime.add_days (duedate.recurrency_interval * 7);
         }
-        
+
         string[] weeks = duedate.recurrency_weeks.split (","); // [1, 2, 3]
         int day_of_week = datetime.get_day_of_week (); // 2
         int days = 0;
@@ -562,7 +562,7 @@ public class Utils.Datetime {
         if (due.recurrence_string != "" && due.is_recurring) {
             return due.recurrence_string;
         }
-        
+
         if (due.date != "" && !is_iso_due_date (due.date)) {
             return due.date;
         }
@@ -591,7 +591,7 @@ public class Utils.Datetime {
             returned += due.recurrency_interval.to_string () + " ";
             returned += recurrency_type_string;
             returned += "s ";
-        } else if (!(due.recurrency_type == RecurrencyType.EVERY_WEEK && due.recurrency_weeks != "")) { 
+        } else if (!(due.recurrency_type == RecurrencyType.EVERY_WEEK && due.recurrency_weeks != "")) {
             returned += recurrency_type_string + " ";
         }
         if (due.recurrency_type == RecurrencyType.EVERY_WEEK && due.recurrency_weeks != "") {
@@ -621,7 +621,7 @@ public class Utils.Datetime {
         if (due.recurrency_end != "") {
             returned += "until ";
             returned += due.end_datetime.format ("%F");
-        }        
+        }
         return returned;
     }
 
@@ -739,12 +739,15 @@ public class Utils.Datetime {
     public static ICal.Timezone ? get_system_timezone () {
         #if WITH_EVOLUTION
         return ECal.util_get_system_timezone ();
-        #else    
+        #elif IS_WINDOWS
+        string win_tzid = new GLib.TimeZone.local ().get_identifier ();
+        string tzid = Win32Util.windows_to_ical_timezone(win_tzid);
+        return ICal.Timezone.get_builtin_timezone (tzid);
+        #else
         string tzid = new GLib.TimeZone.local ().get_identifier ();
         return ICal.Timezone.get_builtin_timezone (tzid);
         #endif
     }
-
 
     public static string get_markdown_format_date (Objects.Item item) {
         if (!item.has_due) {
@@ -768,7 +771,7 @@ public class Utils.Datetime {
     public static string get_relative_time_from_date (GLib.DateTime date) {
         var date_only = get_date_only (date);
         var today = get_date_only (new GLib.DateTime.now_local ());
-                
+
         string relative_time;
         if (is_today (date_only)) {
             relative_time = _("Today");
@@ -784,13 +787,13 @@ public class Utils.Datetime {
                 relative_time = GLib.ngettext ("%d day ago", "%d days ago", -days_diff).printf (-days_diff);
             }
         }
-        
+
         return relative_time;
     }
 
     public static string get_short_date_format_from_date (GLib.DateTime date) {
         var date_only = get_date_only (date);
-        
+
         var day_name = date_only.format ("%a");
         var day_month = date_only.format (day_month_format ());
 
@@ -802,19 +805,24 @@ public class Utils.Datetime {
     // from the locale's short date format (LC_TIME) and cached.
     private static int _day_first = -1; // -1 unknown, 0 month-first, 1 day-first
     private static bool locale_day_before_month () {
-        if (_day_first == -1) {
-            _day_first = 0; // default to month-first if it can't be determined
-            unowned string d_fmt = Posix.NLItem.D_FMT.to_string ();
-            if (d_fmt != null && d_fmt != "") {
-                int day_pos = first_token_pos (d_fmt, "de");   // %d, %e
-                int month_pos = first_token_pos (d_fmt, "mbBh"); // %m, %b, %B, %h
-                if (day_pos >= 0 && month_pos >= 0 && day_pos < month_pos) {
-                    _day_first = 1;
+        #if IS_WINDOWS
+            // system locale info not available on Windows; just return default of 0
+            return _day_first == 0;
+        #else
+            if (_day_first == -1) {
+                _day_first = 0; // default to month-first if it can't be determined
+
+                unowned string d_fmt = Posix.NLItem.D_FMT.to_string ();
+                if (d_fmt != null && d_fmt != "") {
+                    int day_pos = first_token_pos (d_fmt, "de");   // %d, %e
+                    int month_pos = first_token_pos (d_fmt, "mbBh"); // %m, %b, %B, %h
+                    if (day_pos >= 0 && month_pos >= 0 && day_pos < month_pos) {
+                        _day_first = 1;
+                    }
                 }
             }
-        }
-
-        return _day_first == 1;
+            return _day_first == 1;
+        #endif
     }
 
     // Position of the first %<token> in `fmt` whose letter is in `tokens`,

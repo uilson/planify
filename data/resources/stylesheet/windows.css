@@ -1,0 +1,21 @@
+window,
+popover,
+popover contents,
+.background,
+.boxed-list {
+    border-radius: 8px;
+}
+
+window.planify-main {
+    background-color: @window_bg_color;
+    border-top: 1px solid @item_border_color;
+    border-radius: 0;
+}
+
+.planify-main .sidebar-pane {
+    box-shadow: none;
+}
+
+.planify-main .content-pane {
+    border-left: 1px solid @item_border_color;
+}

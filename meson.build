@@ -33,6 +33,19 @@ gnome = import('gnome')
 i18n = import('i18n')
 pkgconfig = import('pkgconfig')
 
+# is this a Windows build?
+is_windows = (host_machine.system() == 'windows')
+if is_windows
+    add_project_arguments('-D', 'IS_WINDOWS', language: 'vala')
+endif
+
+# parse webkit, portal, evolution, and winconsole options
+# on Windows these are unsupported and are forced to false
+with_portal = (get_option('portal') and not is_windows)
+with_evolution = (get_option('evolution') and not is_windows)
+with_goa = (get_option('goa') and not is_windows)
+with_win_console = (get_option('winconsole'))
+
 add_global_arguments('-DGETTEXT_PACKAGE="@0@"'.format (application_id), language:'c')
 add_project_arguments('-DLIBICAL_GLIB_UNSTABLE_API=1', language: 'c')
 
@@ -71,7 +84,7 @@ if libspelling.found ()
   add_project_arguments(['--define=WITH_LIBSPELLING'], language: 'vala')
 endif
 
-if get_option('portal')
+if with_portal
     libportal_dep = dependency('libportal', required: true)
     libportal_gtk4_dep = dependency('libportal-gtk4', required: true)
     add_project_arguments('-D', 'WITH_LIBPORTAL', language: 'vala')
@@ -83,7 +96,7 @@ if get_option('portal')
     endif
 endif
 
-if get_option('evolution')
+if with_evolution
     libecal_dep = dependency('libecal-2.0', version: '>= 3.45.1')
     libedataserver_dep = dependency('libedataserver-1.2', version: '>= 3.45.1')
     add_project_arguments('-D', 'WITH_EVOLUTION', language: 'vala')
@@ -95,7 +108,7 @@ if get_option('evolution')
     endif
 endif
 
-if get_option('goa')
+if with_goa
     goa_dep = dependency('goa-1.0', required: true)
     add_project_arguments('-D', 'WITH_GOA', language: 'vala')
     add_project_arguments('-DGOA_API_IS_SUBJECT_TO_CHANGE', language: 'c')
@@ -127,15 +140,19 @@ grep = find_program('grep')
 total_strings_res = run_command(grep, '-c', 'msgid', meson.project_source_root() + '/po/io.github.alainm23.planify.pot', check : true)
 total_strings = total_strings_res.stdout().strip().to_int() - 1
 
-# _NL_TIME_FIRST_WEEKDAY is a glibc-ism
-nl_time_first_weekday_src = '''
-  #include <langinfo.h>
-  int main() {
-    nl_langinfo(_NL_TIME_FIRST_WEEKDAY);
-  };
-'''
-if cc.compiles(nl_time_first_weekday_src)
-    add_project_arguments('-D', 'HAVE__NL_TIME_FIRST_WEEKDAY', language: 'vala')
+
+# langinfo.h is not available in MSYS2; skip on Windows
+if not is_windows
+  # _NL_TIME_FIRST_WEEKDAY is a glibc-ism
+  nl_time_first_weekday_src = '''
+
+    int main() {
+      nl_langinfo(_NL_TIME_FIRST_WEEKDAY);
+    };
+  '''
+  if cc.compiles(nl_time_first_weekday_src)
+      add_project_arguments('-D', 'HAVE__NL_TIME_FIRST_WEEKDAY', language: 'vala')
+  endif
 endif
 
 conf_data = configuration_data()
@@ -172,8 +189,11 @@ summary({
   'Profile': get_option('profile'),
 }, section: 'Development')
 
+# desktop update not needed on Windows (throws a spurious error)
+should_update_desktop_db = (not is_windows)
+
 gnome.post_install(
   glib_compile_schemas: true,
   gtk_update_icon_cache: true,
-  update_desktop_database: true,
+  update_desktop_database: should_update_desktop_db
 )

@@ -131,6 +131,11 @@ public class Layouts.HeaderBar : Adw.Bin {
         headerbar.pack_start (sidebar_button);
         headerbar.pack_start (back_button_revealer);
 
+        #if IS_WINDOWS
+        // on Windows we're using the native titlebar & window controls, so don't show the duplicative GTK/Adwaita ones
+        headerbar.set_show_end_title_buttons(false);
+        #endif
+
         child = headerbar;
 
         signal_map[sidebar_button.clicked.connect (() => {
@@ -144,7 +149,7 @@ public class Layouts.HeaderBar : Adw.Bin {
 
         signal_map[Services.Settings.get_default ().settings.changed["slim-mode"].connect (() => {
             update_sidebar_icon ();
-        })] = Services.Settings.get_default ();
+        })] = Services.Settings.get_default ().settings;
     }
 
     private void update_sidebar_icon () {
